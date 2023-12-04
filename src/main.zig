@@ -56,16 +56,8 @@ const CPU = packed struct {
     }
 
     fn LDASetStatus(self: *CPU) void {
-        if (self.A == 0) {
-            self.Z = 1;
-        } else {
-            self.Z = 0;
-        }
-        if ((self.A & 0b1000000) > 0) {
-            self.N = 1;
-        } else {
-            self.N = 0;
-        }
+        self.Z = @intFromBool(self.A == 0);
+        self.N = @intFromBool((self.A & 0b1000000) > 0);
     }
 
     pub fn Execute(self: *CPU, cycles: u32, mem: *Mem) void {

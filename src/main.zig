@@ -2,6 +2,8 @@ const std = @import("std");
 
 const INS_LDA_IN = 0xA9;
 const INS_LDA_ZP = 0xA5;
+const INS_LDA_ZPX = 0xB5;
+const INS_JSR = 0x20;
 
 const Mem: type = struct {
     const MAX_MEM = 1024 * 64;
@@ -12,6 +14,11 @@ const Mem: type = struct {
         for (&self.data) |*x| {
             x.* = 0;
         }
+    }
+
+    pub fn WriteWord(self: *Mem, value: u16, address: u16) void {
+        self.data[address] = @as(u8, @truncate(value & 0xFF));
+        self.data[address + 1] = @as(u8, @truncate(value >> 8));
     }
 };
 
@@ -40,6 +47,14 @@ const CPU = packed struct {
 
     pub fn ReadByte(address: u8, mem: *Mem) u8 {
         return mem.data[address];
+    }
+
+    pub fn FetchWord(self: *CPU, mem: *Mem) u16 {
+        var data: u16 = mem.data[self.PC];
+        self.PC += 1;
+        const temp: u16 = mem.data[self.PC];
+        data |= temp << 8;
+        return data;
     }
 
     pub fn Reset(self: *CPU, mem: *Mem) void {
@@ -81,6 +96,26 @@ const CPU = packed struct {
                     LDASetStatus(self);
                     break;
                 },
+                INS_LDA_ZPX => {
+                    var zPageAdd = self.FetchByte(mem);
+                    cyc -= 1;
+                    zPageAdd += self.X;
+                    cyc -= 1;
+                    self.A = ReadByte(zPageAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self);
+                    break;
+                },
+                INS_JSR => {
+                    const subAddr = self.FetchWord(mem);
+                    cyc -= 1;
+                    mem.WriteWord(self.PC - 1, self.SP);
+                    cyc -= 2;
+                    self.SP += 1;
+                    cyc -= 1;
+                    self.PC = subAddr;
+                    cyc -= 1;
+                },
                 else => {},
             }
         }
@@ -108,14 +143,27 @@ pub fn main() !void {
     mem.data[0xFFFC] = INS_LDA_IN;
     mem.data[0xFFFD] = 0x42;
     cpu.Execute(2, &mem);
-    std.debug.print("cpu.A: {x}\r\ncpu.PC: {x}\r\n", .{ cpu.A, cpu.PC });
+    std.debug.print("cpu.A: 0x{x}\r\ncpu.PC: 0x{x}\r\n", .{ cpu.A, cpu.PC });
 
     cpu.Reset(&mem);
     mem.data[0xFFFC] = INS_LDA_ZP;
     mem.data[0xFFFD] = 0x42;
     mem.data[0x0042] = 0x84;
     cpu.Execute(3, &mem);
-    std.debug.print("cpu.A: {x}\r\ncpu.PC: {x}\r\n", .{ cpu.A, cpu.PC });
+    std.debug.print("cpu.A: 0x{x}\r\ncpu.PC: 0x{x}\r\n", .{ cpu.A, cpu.PC });
+
+    cpu.Reset(&mem);
+    mem.data[0xFFFC] = INS_JSR;
+    mem.data[0xFFFD] = 0x42;
+    mem.data[0xFFFE] = 0x42;
+    mem.data[0x4242] = INS_LDA_IN;
+    mem.data[0x4243] = 0x84;
+    std.debug.print("Before\r\n", .{});
+    std.debug.print("cpu.A: 0x{x}\r\ncpu.PC: 0x{x}\r\n", .{ cpu.A, cpu.PC });
+    cpu.Execute(8, &mem);
+    std.debug.print("After\r\n", .{});
+    std.debug.print("cpu.A: 0x{x}\r\ncpu.PC: 0x{x}\r\n", .{ cpu.A, cpu.PC });
+    std.debug.print("cpu.SP: 0x{x}\r\ncpu.PC: 0x{x}\r\n", .{ cpu.SP, cpu.PC });
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     //std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
 

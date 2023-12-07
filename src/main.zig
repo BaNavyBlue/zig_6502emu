@@ -58,9 +58,12 @@ pub fn main() !void {
     //try bw.flush(); // don't forget to flush!
 }
 
-// test "simple test" {
-//     var list = std.ArrayList(i32).init(std.testing.allocator);
-//     defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-//     try list.append(42);
-//     try std.testing.expectEqual(@as(i32, 42), list.pop());
-//}
+test "LDA IM Can Load Val into A Reg" {
+    var mem: M6502.Mem = undefined;
+    cpu.Reset(&mem);
+    mem.data[0xFFFC] = M6502.INS_LDA_IN;
+    mem.data[0xFFFD] = 0x42;
+    cpu.Execute(2, &mem);
+
+    try std.testing.expectEqual(@as(u16, 0x42), cpu.A);
+}

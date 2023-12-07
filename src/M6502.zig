@@ -3,6 +3,9 @@ const std = @import("std");
 pub const INS_LDA_IN = 0xA9;
 pub const INS_LDA_ZP = 0xA5;
 pub const INS_LDA_ZPX = 0xB5;
+pub const INS_LDA_ABS = 0xAD;
+pub const INS_LDA_ABSX = 0xBD;
+pub const INS_LDA_ABSY = 0xB9;
 pub const INS_JSR = 0x20;
 
 pub const Mem: type = struct {

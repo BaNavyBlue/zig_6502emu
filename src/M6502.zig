@@ -6,6 +6,8 @@ pub const INS_LDA_ZPX = 0xB5;
 pub const INS_LDA_ABS = 0xAD;
 pub const INS_LDA_ABSX = 0xBD;
 pub const INS_LDA_ABSY = 0xB9;
+pub const INS_LDA_INDX = 0xA1;
+pub const INS_LDA_INDY = 0xB1;
 pub const INS_JSR = 0x20;
 
 pub const Mem: type = struct {
@@ -48,8 +50,14 @@ pub const CPU = packed struct {
         return data;
     }
 
-    pub fn ReadByte(address: u8, mem: *Mem) u8 {
+    pub fn ReadByte(address: u16, mem: *Mem) u8 {
         return mem.data[address];
+    }
+
+    pub fn ReadWord(address: u16, mem: *Mem) u16 {
+        const lowByte = ReadByte(address, mem);
+        const highByte = ReadByte(address + 1, mem);
+        return (@as(u16, highByte) << 8) | lowByte;
     }
 
     pub fn FetchWord(self: *CPU, mem: *Mem) u16 {
@@ -102,9 +110,66 @@ pub const CPU = packed struct {
                 INS_LDA_ZPX => {
                     var zPageAdd = self.FetchByte(mem);
                     cyc -= 1;
-                    zPageAdd += self.X;
+                    zPageAdd +%= self.X; // +%= allows wrap around.
                     cyc -= 1;
                     self.A = ReadByte(zPageAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self);
+                    break;
+                },
+                INS_LDA_ABS => {
+                    const absAdd = self.FetchWord(mem);
+                    cyc -= 2;
+                    self.A = ReadByte(absAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self);
+                    break;
+                },
+                INS_LDA_ABSX => {
+                    var absAdd = self.FetchWord(mem);
+                    cyc -= 2;
+                    if ((absAdd & 0x00FF) + self.X > 0xFF) {
+                        cyc -= 1;
+                    }
+                    absAdd += self.X;
+                    self.A = ReadByte(absAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self);
+                    break;
+                },
+                INS_LDA_ABSY => {
+                    var absAdd = self.FetchWord(mem);
+                    cyc -= 2;
+                    if ((absAdd & 0x00FF) + self.Y > 0xFF) {
+                        cyc -= 1;
+                    }
+                    absAdd += self.Y;
+                    self.A = ReadByte(absAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self);
+                    break;
+                },
+                INS_LDA_INDX => {
+                    var zPageAdd = self.FetchByte(mem);
+                    cyc -= 1;
+                    zPageAdd += self.X;
+                    cyc -= 1;
+                    const targetAdd = ReadWord(zPageAdd, mem);
+                    self.A = ReadByte(targetAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self);
+                    break;
+                },
+                INS_LDA_INDY => {
+                    const zPageAdd = self.FetchByte(mem);
+                    cyc -= 1;
+                    var targetAdd = ReadWord(zPageAdd, mem);
+                    cyc -= 2;
+                    if ((targetAdd & 0x00FF) + self.Y > 0xFF) {
+                        cyc -= 1;
+                    }
+                    targetAdd += self.Y;
+                    self.A = ReadByte(targetAdd, mem);
                     cyc -= 1;
                     LDASetStatus(self);
                     break;

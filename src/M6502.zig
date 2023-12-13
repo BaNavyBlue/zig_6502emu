@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const INS_LDA_IN = 0xA9;
+pub const INS_LDA_IM = 0xA9;
 pub const INS_LDA_ZP = 0xA5;
 pub const INS_LDA_ZPX = 0xB5;
 pub const INS_LDA_ABS = 0xAD;
@@ -8,6 +8,16 @@ pub const INS_LDA_ABSX = 0xBD;
 pub const INS_LDA_ABSY = 0xB9;
 pub const INS_LDA_INDX = 0xA1;
 pub const INS_LDA_INDY = 0xB1;
+pub const INS_LDX_IM = 0xA2;
+pub const INS_LDX_ZP = 0xA6;
+pub const INS_LDX_ZPY = 0xB6;
+pub const INS_LDX_ABS = 0xAE;
+pub const INS_LDX_ABSY = 0xBE;
+pub const INS_LDY_IM = 0xA0;
+pub const INS_LDY_ZP = 0xA4;
+pub const INS_LDY_ZPX = 0xB4;
+pub const INS_LDY_ABS = 0xAC;
+pub const INS_LDY_ABSX = 0xBC;
 pub const INS_JSR = 0x20;
 
 pub const Mem: type = struct {
@@ -45,7 +55,7 @@ pub const CPU = packed struct {
 
     pub fn FetchByte(self: *CPU, mem: *Mem) u8 {
         const data = mem.data[self.PC];
-        self.PC += 1;
+        self.PC +%= 1;
         //self.SP -= 1;
         return data;
     }
@@ -62,7 +72,7 @@ pub const CPU = packed struct {
 
     pub fn FetchWord(self: *CPU, mem: *Mem) u16 {
         var data: u16 = mem.data[self.PC];
-        self.PC += 1;
+        self.PC +%= 1;
         const temp: u16 = mem.data[self.PC];
         data |= temp << 8;
         return data;
@@ -81,9 +91,9 @@ pub const CPU = packed struct {
         mem.Initialize();
     }
 
-    fn LDASetStatus(self: *CPU) void {
-        self.Z = @intFromBool(self.A == 0);
-        self.N = @intFromBool((self.A & 0b1000000) > 0);
+    fn LDASetStatus(self: *CPU, reg: *u8) void {
+        self.Z = @intFromBool(reg.* == 0);
+        self.N = @intFromBool((reg.* & 0b1000000) > 0);
     }
 
     pub fn Execute(self: *CPU, cycles: u32, mem: *Mem) void {
@@ -92,11 +102,11 @@ pub const CPU = packed struct {
             const ins = self.FetchByte(mem);
             cyc -= 1;
             switch (ins) {
-                INS_LDA_IN => {
+                INS_LDA_IM => {
                     const value = self.FetchByte(mem);
                     cyc -= 1;
                     self.A = value;
-                    LDASetStatus(self);
+                    LDASetStatus(self, &self.A);
                     break;
                 },
                 INS_LDA_ZP => {
@@ -104,7 +114,7 @@ pub const CPU = packed struct {
                     cyc -= 1;
                     self.A = ReadByte(address, mem);
                     cyc -= 1;
-                    LDASetStatus(self);
+                    LDASetStatus(self, &self.A);
                     break;
                 },
                 INS_LDA_ZPX => {
@@ -114,7 +124,7 @@ pub const CPU = packed struct {
                     cyc -= 1;
                     self.A = ReadByte(zPageAdd, mem);
                     cyc -= 1;
-                    LDASetStatus(self);
+                    LDASetStatus(self, &self.A);
                     break;
                 },
                 INS_LDA_ABS => {
@@ -122,7 +132,7 @@ pub const CPU = packed struct {
                     cyc -= 2;
                     self.A = ReadByte(absAdd, mem);
                     cyc -= 1;
-                    LDASetStatus(self);
+                    LDASetStatus(self, &self.A);
                     break;
                 },
                 INS_LDA_ABSX => {
@@ -134,7 +144,7 @@ pub const CPU = packed struct {
                     absAdd += self.X;
                     self.A = ReadByte(absAdd, mem);
                     cyc -= 1;
-                    LDASetStatus(self);
+                    LDASetStatus(self, &self.A);
                     break;
                 },
                 INS_LDA_ABSY => {
@@ -146,7 +156,7 @@ pub const CPU = packed struct {
                     absAdd += self.Y;
                     self.A = ReadByte(absAdd, mem);
                     cyc -= 1;
-                    LDASetStatus(self);
+                    LDASetStatus(self, &self.A);
                     break;
                 },
                 INS_LDA_INDX => {
@@ -157,7 +167,7 @@ pub const CPU = packed struct {
                     const targetAdd = ReadWord(zPageAdd, mem);
                     self.A = ReadByte(targetAdd, mem);
                     cyc -= 1;
-                    LDASetStatus(self);
+                    LDASetStatus(self, &self.A);
                     break;
                 },
                 INS_LDA_INDY => {
@@ -171,7 +181,97 @@ pub const CPU = packed struct {
                     targetAdd += self.Y;
                     self.A = ReadByte(targetAdd, mem);
                     cyc -= 1;
-                    LDASetStatus(self);
+                    LDASetStatus(self, &self.A);
+                    break;
+                },
+                INS_LDX_IM => {
+                    const value = self.FetchByte(mem);
+                    cyc -= 1;
+                    self.X = value;
+                    LDASetStatus(self, &self.X);
+                    break;
+                },
+                INS_LDX_ZP => {
+                    const address: u8 = self.FetchByte(mem);
+                    cyc -= 1;
+                    self.X = ReadByte(address, mem);
+                    cyc -= 1;
+                    LDASetStatus(self, &self.X);
+                    break;
+                },
+                INS_LDX_ZPY => {
+                    var zPageAdd = self.FetchByte(mem);
+                    cyc -= 1;
+                    zPageAdd +%= self.Y; // +%= allows wrap around.
+                    cyc -= 1;
+                    self.X = ReadByte(zPageAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self, &self.X);
+                    break;
+                },
+                INS_LDX_ABS => {
+                    const absAdd = self.FetchWord(mem);
+                    cyc -= 2;
+                    self.X = ReadByte(absAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self, &self.X);
+                    break;
+                },
+                INS_LDX_ABSY => {
+                    var absAdd = self.FetchWord(mem);
+                    cyc -= 2;
+                    if ((absAdd & 0x00FF) + self.Y > 0xFF) {
+                        cyc -= 1;
+                    }
+                    absAdd += self.Y;
+                    self.X = ReadByte(absAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self, &self.X);
+                    break;
+                },
+                INS_LDY_IM => {
+                    const value = self.FetchByte(mem);
+                    cyc -= 1;
+                    self.Y = value;
+                    LDASetStatus(self, &self.Y);
+                    break;
+                },
+                INS_LDY_ZP => {
+                    const address: u8 = self.FetchByte(mem);
+                    cyc -= 1;
+                    self.Y = ReadByte(address, mem);
+                    cyc -= 1;
+                    LDASetStatus(self, &self.Y);
+                    break;
+                },
+                INS_LDY_ZPX => {
+                    var zPageAdd = self.FetchByte(mem);
+                    cyc -= 1;
+                    zPageAdd +%= self.X; // +%= allows wrap around.
+                    cyc -= 1;
+                    self.Y = ReadByte(zPageAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self, &self.Y);
+                    break;
+                },
+                INS_LDY_ABS => {
+                    const absAdd = self.FetchWord(mem);
+                    cyc -= 2;
+                    self.Y = ReadByte(absAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self, &self.Y);
+                    break;
+                },
+                INS_LDY_ABSX => {
+                    var absAdd = self.FetchWord(mem);
+                    cyc -= 2;
+                    if ((absAdd & 0x00FF) + self.X > 0xFF) {
+                        cyc -= 1;
+                    }
+                    absAdd += self.X;
+                    self.Y = ReadByte(absAdd, mem);
+                    cyc -= 1;
+                    LDASetStatus(self, &self.Y);
                     break;
                 },
                 INS_JSR => {
